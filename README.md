@@ -1,11 +1,18 @@
 # Graphene
-Cryptography learnings
+This repo is focused on Cryptography and cyber security learnings.
+
 
 # Cryptography
 Cryptography is the study of taking in data and scrambling it so that it ensures security and privacy of the users. In simple words, it's the science of creating secrets.
 
 The main topics in Basics of Cryptography are:
 - Hashing
+- Salting
+- Encoding
+- Encryption
+    - Symmetrical
+    - Asymmetrical
+
 
 # Hashing
 Hashing is the process of transforming any given key or a string of characters into another value.
@@ -55,13 +62,83 @@ Salt is a random value added to the password before hashing.
 
 Common way of saving salt is `salt:hashedPassword`. Another way as done by `Argon2` is `$salt$hashedPassword`
 
-## Encoding
+# Encoding
+To store the human-readable characters on computers, we need to **encode** them into bytes.
+In contrast, we need to decode the bytes into human-readable characters for representation.
+
+Byte, in computer science, indicates a unit of `0/1`, commonly of length 8. So characters `Hi` are actually stored as `01001000 01101001` on the computer, which consumes 2 bytes (16-bits).
+
+The rule that defines the encoding process is called **encoding schema**. Commonly used ones include *ASCII*, *UTF-8* and *UTF-16*. 
+
+Now, the question how do these encoding schemas look like?
+
+**ASCII** converts each character into one byte. Since one byte consisted of 8 bits and each bit contains 0/1. The total number of characters ASCII can represent is `2^8 = 256`. It is more than enough for 26 English letters plus some commonly-used characters such as `$`.
+
+However, 256 characters are obviously not enough for storing all the characters in the world. 
+In light of that, people designed Unicode in which each character will be encoded as a **code point**. 
+For instance, `H` will be represented as code point `U+0048`.
+
+According to Wikipedia, Unicode can include 144,697 characters.
+But again, the code point still can not be recognized by the computer, so we have UTF-8 or other variants encoding schema to convert the code point to the byte.
+
+**UTF-8** means the minimum length of bits to represent a character is 8, so you can guess, **UTF-16** means the minimum length of bits is 16. 
+
+With the basic concepts understood, let’s cover some practical coding tips in Python. 
+
+In Python3, the default string is called Unicode string (`u` string), you can understand them as human-readable characters. As explained above, you can encode them to the byte string (`b` string), and the byte string can be decoded back to the Unicode string.
+
+```py
+u'Hi'.encode('ASCII')
+> b'Hi'
+b'\x48\x69'.decode('ASCII')
+> 'Hi'
+```
+In Python IDE, usually, the byte string will be automatically decoded using ASCII when printed out, so that’s why the first result is human-readable (`b'Hi'`). More often, Byte string should be represented as Hex code (`b'\x48\x69'`).
+
+This is important to remember, because when we hash our passwords and print it, some algorithms such as Argon2 will display base64 data. That is, even if 32-byte (256 bit) binary hash is generated, this will be encoded into base64 and displayed as a 43 character long string. Now, in base64, everything is encoded into 64 characters (A-Z, a-z, 0-9, +, /). This would 2^6 chanarcters. So, 6-bits can be used to display characters. As a result, the 256 bits will yield 43 characters. As a result, we would need to decode this base64 characters to convert them into binary bytes.
+Check {$ref(hashcode)} for code example
+
+## Base64 Padding
+Padding characters help satisfy length requirements and carry no other meaning.
+
+Decimal Example of Padding: Given the arbitrary requirement all strings be 8 characters in length, the number 640 can meet this requirement using preceding 0's as padding characters as they carry no meaning, `00000640`.
+
+The Byte Paradigm: For encoding, the byte is the de facto standard unit of measurement and any scheme must relate back to bytes.
+- **Base256** fits exactly into the byte paradigm. One byte is equal to one character in base256.
+- **Base16** hexadecimal or hex, uses 4 bits for each character. One byte can represent two base16 characters.
+- **Base64** does not fit evenly into the byte paradigm (nor does `base32`), unlike base256 and base16. All base64 characters can be represented in 6 bits, 2 bits short of a full byte.
+
+We can represent base64 encoding versus the byte paradigm as a fraction: 6 bits per character over 8 bits per byte.
+Reduced this fraction is 3 bytes over 4 characters.
+
+This ratio, 3 bytes for every 4 base64 characters, is the rule we want to follow when encoding base64.
+Base64 encoding can only promise even measuring with 3 byte bundles, unlike base16 and base256 where every byte can stand on it's own.
+
+So why is padding encouraged even though encoding could work just fine without the padding characters?
+
+If the length of a stream is unknown or if it could be helpful to know exactly when a data stream ends, use padding.
+The padding characters communicate explicitly that those extra spots should be empty and rules out any ambiguity.
+Even if the length is unknown with padding you'll know where your data stream ends.
+
+Suppose we have a program that base64-encodes words, concatenates them and sends them over a network. It encodes "I", "AM" and "TJM", sandwiches the results together without padding and transmits them.
+- I encodes to SQ (SQ== with padding)
+- AM encodes to QU0 (QU0= with padding)
+- TJM encodes to VEpN (VEpN with padding)
+
+So the transmitted data is SQQU0VEpN. The receiver base64-decodes this as I\x04\x14\xd1Q) instead of the intended IAMTJM. The result is nonsense because the sender has destroyed information about where each word ends in the encoded sequence. If the sender had sent SQ==QU0=VEpN instead, the receiver could have decoded this as three separate base64 sequences which would concatenate to give IAMTJM.
+
+This is important to remember because decoding from base64 to bytes may sometimes result in an error depending on the protocol/library used so ensure base64 hash has padding before we start decoding.
+
+## TLDR:
+- UTF-8 and UTF-16 are methods to encode Unicode strings to byte sequences.
+- Base64 is a method to encode a byte sequence to a string.
+
+Things to keep in mind:
+- Not every byte sequence represents an Unicode string encoded in UTF-8 or UTF-16.
+- Not every Unicode string represents a byte sequence encoded in Base64.
 
 ---
-# Notes
-# Encoding
-- base64
-
+# Appendix
 
 ## Argon2:
 https://argon2-cffi.readthedocs.io/en/latest/
@@ -87,89 +164,3 @@ https://en.wikipedia.org/wiki/Cryptographic_hash_function
 
 
 
-# Encoding:
-## Padding
-However, padding is useful in situations where base64 encoded strings are concatenated in such a way that the lengths of the individual sequences are lost, as might happen, for example, in a very simple network protocol.
-
-If unpadded strings are concatenated, it's impossible to recover the original data because information about the number of odd bytes at the end of each individual sequence is lost. However, if padded sequences are used, there's no ambiguity, and the sequence as a whole can be decoded correctly.
-Edit: An Illustration
-
-Suppose we have a program that base64-encodes words, concatenates them and sends them over a network. It encodes "I", "AM" and "TJM", sandwiches the results together without padding and transmits them.
-
-    I encodes to SQ (SQ== with padding)
-    AM encodes to QU0 (QU0= with padding)
-    TJM encodes to VEpN (VEpN with padding)
-
-So the transmitted data is SQQU0VEpN. The receiver base64-decodes this as I\x04\x14\xd1Q) instead of the intended IAMTJM. The result is nonsense because the sender has destroyed information about where each word ends in the encoded sequence. If the sender had sent SQ==QU0=VEpN instead, the receiver could have decoded this as three separate base64 sequences which would concatenate to give IAMTJM.
-Why Bother with Padding?
-
-Why not just design the protocol to prefix each word with an integer length? Then the receiver could decode the stream correctly and there would be no need for padding.
-
-That's a great idea, as long as we know the length of the data we're encoding before we start encoding it. But what if, instead of words, we were encoding chunks of video from a live camera? We might not know the length of each chunk in advance.
-
-If the protocol used padding, there would be no need to transmit a length at all. The data could be encoded as it came in from the camera, each chunk terminated with padding, and the receiver would be able to decode the stream correctly.
-
-Obviously that's a very contrived example, but perhaps it illustrates why padding might conceivably be helpful in some situations.
-
-## second solution:
-https://stackoverflow.com/questions/4080988/why-does-base64-encoding-require-padding-if-the-input-length-is-not-divisible-by
-What are Padding Characters?
-
-Padding characters help satisfy length requirements and carry no other meaning.
-
-Decimal Example of Padding: Given the arbitrary requirement all strings be 8 characters in length, the number 640 can meet this requirement using preceding 0's as padding characters as they carry no meaning, "00000640".
-Binary Encoding
-
-The Byte Paradigm: For encoding, the byte is the de facto standard unit of measurement and any scheme must relate back to bytes.
-
-Base256 fits exactly into the byte paradigm. One byte is equal to one character in base256.
-
-Base16, hexadecimal or hex, uses 4 bits for each character. One byte can represent two base16 characters.
-
-Base64 does not fit evenly into the byte paradigm (nor does base32), unlike base256 and base16. All base64 characters can be represented in 6 bits, 2 bits short of a full byte.
-
-We can represent base64 encoding versus the byte paradigm as a fraction: 6 bits per character over 8 bits per byte. Reduced this fraction is 3 bytes over 4 characters.
-
-This ratio, 3 bytes for every 4 base64 characters, is the rule we want to follow when encoding base64. Base64 encoding can only promise even measuring with 3 byte bundles, unlike base16 and base256 where every byte can stand on it's own.
-
-So why is padding encouraged even though encoding could work just fine without the padding characters?
-
-If the length of a stream is unknown or if it could be helpful to know exactly when a data stream ends, use padding. The padding characters communicate explicitly that those extra spots should be empty and rules out any ambiguity. Even if the length is unknown with padding you'll know where your data stream ends.
-
-As a counter example, some standards like JOSE don't allow padding characters. In this case, if there is something missing, a cryptographic signature won't work or other non base64 characters will be missing (like the "."). Although assumptions about length aren't made, padding isn't needed because if there is something wrong it simply won't work.
-
-And this is exactly what the base64 RFC says,
-
-    In some circumstances, the use of padding ("=") in base-encoded data is not required or used. In the general case, when assumptions about the size of transported data cannot be made, padding is required to yield correct decoded data.
-
-    [...]
-
-    The padding step in base 64 [...] if improperly implemented, lead to non-significant alterations of the encoded data. For example, if the input is only one octet for a base 64 encoding, then all six bits of the first symbol are used, but only the first two bits of the next symbol are used. These pad bits MUST be set to zero by conforming encoders, which is described in the descriptions on padding below. If this property do not hold, there is no canonical representation of base-encoded data, and multiple base- encoded strings can be decoded to the same binary data. If this property (and others discussed in this document) holds, a canonical encoding is guaranteed.
-
-Padding allows us to decode base64 encoding with the promise of no lost bits. Without padding there is no longer the explicit acknowledgement of measuring in three byte bundles. Without padding you may not be able to guarantee exact reproduction of original encoding without additional information usually from somewhere else in your stack, like TCP, checksums, or other methods.
-
-Alternatively to bucket conversion schemes like base64 is radix conversion which has no arbitrary bucket sizes and for left-to-right readers is left padded. The "iterative divide by radix" conversion method is typically employed for radix conversions.
-Examples
-
-Here is the example form RFC 4648 (https://www.rfc-editor.org/rfc/rfc4648#section-8)
-
-Each character inside the "BASE64" function uses one byte (base256). We then translate that to base64.
-
-BASE64("")       = ""           (No bytes used. 0 % 3 = 0)
-BASE64("f")      = "Zg=="       (One byte used. 1 % 3 = 1)
-BASE64("fo")     = "Zm8="       (Two bytes.     2 % 3 = 2)
-BASE64("foo")    = "Zm9v"       (Three bytes.   3 % 3 = 0)
-BASE64("foob")   = "Zm9vYg=="   (Four bytes.    4 % 3 = 1)
-BASE64("fooba")  = "Zm9vYmE="   (Five bytes.    5 % 3 = 2)
-BASE64("foobar") = "Zm9vYmFy"   (Six bytes.     6 % 3 = 0)
-
-## utf8 base64:
-UTF-8 and UTF-16 are methods to encode Unicode strings to byte sequences.
-Base64 is a method to encode a byte sequence to a string.
-
-Things to keep in mind:
-- Not every byte sequence represents an Unicode string encoded in UTF-8 or UTF-16.
-- Not every Unicode string represents a byte sequence encoded in Base64.
-
-## 43 byte length output
-The hasher generates a 32-byte output. It looks like you, at some point you or the library have used Base64 encoding which does a 4-to-3 expansion of the bytes to convert it into printable characters. To get the 32-bytes expected by AES, you'll need to unencode. 
